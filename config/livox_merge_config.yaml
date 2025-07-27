@@ -1,0 +1,68 @@
+# Livox Multi-LiDAR and IMU Fusion Configuration
+
+# System Parameters
+sync_frequency: 20.0    # Synchronization frequency in Hz
+max_threads: -1         # Maximum threads (-1 for auto-detection)
+
+# LiDAR Configuration
+lidars:
+  count: 2
+  topics:
+    - "/livox/lidar_192_168_10_110"
+    - "/livox/lidar_192_168_11_125"
+  
+  # Extrinsics: 4x4 transformation matrices (row-major order)
+  # Each matrix transforms from LiDAR frame to body frame
+  extrinsics:
+    lidar_0:  # Identity transformation
+      - [1.0, 0.0, 0.0, 0.0]
+      - [0.0, 1.0, 0.0, 0.0]
+      - [0.0, 0.0, 1.0, 0.0]
+      - [0.0, 0.0, 0.0, 1.0]
+    
+    lidar_1:  # 90-degree rotation around Y-axis
+      - [0.0, 0.0, 1.0, 0.0]
+      - [0.0, 1.0, 0.0, 0.0]
+      - [-1.0, 0.0, 0.0, 0.0]
+      - [0.0, 0.0, 0.0, 1.0]
+
+# IMU Configuration
+imus:
+  count: 2
+  topics:
+    - "/livox/imu_192_168_10_110"
+    - "/livox/imu_192_168_11_125"
+  
+  # Extrinsics: 4x4 transformation matrices (row-major order)
+  # Each matrix transforms from IMU frame to body frame
+  extrinsics:
+    imu_0:  # Identity transformation (same as LiDAR 0)
+      - [1.0, 0.0, 0.0, 0.0]
+      - [0.0, 1.0, 0.0, 0.0]
+      - [0.0, 0.0, 1.0, 0.0]
+      - [0.0, 0.0, 0.0, 1.0]
+    
+    imu_1:  # Same rotation as LiDAR 1
+      - [0.0, 0.0, 1.0, 0.0]
+      - [0.0, 1.0, 0.0, 0.0]
+      - [-1.0, 0.0, 0.0, 0.0]
+      - [0.0, 0.0, 0.0, 1.0]
+
+# Output Topics
+output:
+  pointcloud2: "/livox_merge/merged_pointcloud"
+  livox_custom: "/livox_merge/merged_livox"
+  imu: "/livox_merge/merged_imu"
+  frame_id: "body"
+
+# Buffer Management
+buffers:
+  max_lidar_buffer_size: 50
+  max_imu_buffer_size: 200
+  history_retention_time: 0.1  # seconds
+
+# Performance Monitoring
+monitoring:
+  enable_performance_stats: true
+  stats_output_interval: 100  # frames
+  enable_debug_output: false

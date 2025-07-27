@@ -1,0 +1,59 @@
+<launch>
+    <!-- Multi-LiDAR and IMU Fusion Node for Livox Sensors -->
+    <node pkg="livox_merge" type="merge_lidar" name="livox_merge_node" output="screen">
+        
+        <!-- LiDAR Topics -->
+        <rosparam param="lidar_topic">[
+            "/livox/lidar_192_168_10_110",
+            "/livox/lidar_192_168_11_125"
+        ]</rosparam>
+        
+        <!-- IMU Topics (corresponding to each LiDAR) -->
+        <rosparam param="imu_topic">[
+            "/livox/imu_192_168_10_110",
+            "/livox/imu_192_168_11_125"
+        ]</rosparam>
+        
+        <!-- LiDAR Extrinsics (4x4 transformation matrices in row-major order) -->
+        <!-- First LiDAR: Identity transformation -->
+        <!-- Second LiDAR: 90-degree rotation around Y-axis -->
+        <rosparam param="lidar_extr">
+            [1, 0, 0, 0,
+             0, 1, 0, 0,
+             0, 0, 1, 0,
+             0, 0, 0, 1,
+             0, 0, 1, 0,
+             0, 1, 0, 0,
+            -1, 0, 0, 0,
+             0, 0, 0, 1]
+        </rosparam>
+        
+        <!-- IMU Extrinsics (4x4 transformation matrices in row-major order) -->
+        <!-- IMU通常与对应的LiDAR有相同或轻微的偏移 -->
+        <!-- First IMU: Identity transformation (same as LiDAR) -->
+        <!-- Second IMU: Same rotation as second LiDAR -->
+        <rosparam param="imu_extr">
+            [1, 0, 0, 0,
+             0, 1, 0, 0,
+             0, 0, 1, 0,
+             0, 0, 0, 1,
+             0, 0, 1, 0,
+             0, 1, 0, 0,
+            -1, 0, 0, 0,
+             0, 0, 0, 1]
+        </rosparam>
+        
+        <!-- Topic Remapping -->
+        <remap from="/merged_pointcloud" to="/merged_pointcloud"/>
+        <remap from="/merged_livox" to="/merged_livox"/>
+        <remap from="/merged_imu" to="/merged_imu"/>
+    </node>
+
+    <!-- RViz Visualization -->
+    <node name="rviz" pkg="rviz" type="rviz" output="screen" 
+          args="-d $(find livox_merge)/rviz/livox_merge.rviz"/>
+
+    <!-- System Monitoring -->
+    <!-- <node name="fusion_monitor" pkg="livox_merge" type="test_fusion_system.py" output="screen"/> -->
+    
+</launch>
