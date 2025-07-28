@@ -91,6 +91,43 @@ struct ImuPacket
 using namespace std;
 using namespace Eigen;
 
+// Function to convert Euler angles (in degrees) and translation to transformation matrix
+Matrix4d eulerTranslationToMatrix(double roll, double pitch, double yaw, double x, double y, double z)
+{
+    // Convert degrees to radians
+    double roll_rad = roll * M_PI / 180.0;
+    double pitch_rad = pitch * M_PI / 180.0;
+    double yaw_rad = yaw * M_PI / 180.0;
+    
+    // Create rotation matrix using ZYX convention (yaw-pitch-roll)
+    Matrix3d R_z, R_y, R_x;
+    
+    // Rotation around Z-axis (yaw)
+    R_z << cos(yaw_rad), -sin(yaw_rad), 0,
+           sin(yaw_rad),  cos(yaw_rad), 0,
+           0,             0,            1;
+    
+    // Rotation around Y-axis (pitch)
+    R_y << cos(pitch_rad),  0, sin(pitch_rad),
+           0,               1, 0,
+          -sin(pitch_rad),  0, cos(pitch_rad);
+    
+    // Rotation around X-axis (roll)
+    R_x << 1, 0,             0,
+           0, cos(roll_rad), -sin(roll_rad),
+           0, sin(roll_rad),  cos(roll_rad);
+    
+    // Combined rotation matrix (ZYX order)
+    Matrix3d R = R_z * R_y * R_x;
+    
+    // Create 4x4 transformation matrix
+    Matrix4d T = Matrix4d::Identity();
+    T.block<3,3>(0,0) = R;
+    T.block<3,1>(0,3) = Vector3d(x, y, z);
+    
+    return T;
+}
+
 class MergeLidar
 {
 
@@ -182,43 +219,58 @@ public:
             imu_topic.resize(Nlidar);  // 填充空字符串
         }
 
-        // Read the extrincs of lidars
-        vector<double> lidar_extr = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
-        nh_ptr->getParam("lidar_extr", lidar_extr);
-        
-        // Read IMU extrinsics (optional, default to identity transformation)
-        vector<double> imu_extr;
-        nh_ptr->getParam("imu_extr", imu_extr);
-        
-        // If no IMU extrinsics provided, use identity matrices
-        if(imu_extr.empty())
+        // Read LiDAR extrinsics from new format (Euler angles + translation)
+        vector<XmlRpc::XmlRpcValue> lidar_extrinsics_list;
+        if(nh_ptr->hasParam("lidar_extrinsics"))
         {
-            // 为每个IMU创建单位变换矩阵
-            imu_extr.resize(Nlidar * 16);
+            XmlRpc::XmlRpcValue lidar_extrinsics_param;
+            nh_ptr->getParam("lidar_extrinsics", lidar_extrinsics_param);
+            
+            ROS_ASSERT_MSG(lidar_extrinsics_param.getType() == XmlRpc::XmlRpcValue::TypeArray,
+                          "lidar_extrinsics must be an array");
+            ROS_ASSERT_MSG(lidar_extrinsics_param.size() == Nlidar,
+                          "lidar_extrinsics array size (%d) must match number of lidars (%d)",
+                          lidar_extrinsics_param.size(), Nlidar);
+            
             for(int i = 0; i < Nlidar; i++)
             {
-                // 单位矩阵
-                for(int j = 0; j < 16; j++)
-                    imu_extr[i*16 + j] = (j % 5 == 0) ? 1.0 : 0.0;  // 对角线为1，其余为0
+                lidar_extrinsics_list.push_back(lidar_extrinsics_param[i]);
             }
+        }
+        else
+        {
+            // Fallback to old format if new format not found
+            vector<double> lidar_extr = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+            nh_ptr->getParam("lidar_extr", lidar_extr);
+            
+            ROS_ASSERT_MSG( (lidar_extr.size() / 16) == Nlidar,
+                            "Lidar extrinsics not complete: %d < %d (= %d*16)\n",
+                             lidar_extr.size(), Nlidar, Nlidar*16);
+        }
+        
+        // Read IMU extrinsics from new format (Euler angles + translation)
+        vector<XmlRpc::XmlRpcValue> imu_extrinsics_list;
+        if(nh_ptr->hasParam("imu_extrinsics"))
+        {
+            XmlRpc::XmlRpcValue imu_extrinsics_param;
+            nh_ptr->getParam("imu_extrinsics", imu_extrinsics_param);
+            
+            ROS_ASSERT_MSG(imu_extrinsics_param.getType() == XmlRpc::XmlRpcValue::TypeArray,
+                          "imu_extrinsics must be an array");
+            ROS_ASSERT_MSG(imu_extrinsics_param.size() == Nlidar,
+                          "imu_extrinsics array size (%d) must match number of lidars (%d)",
+                          imu_extrinsics_param.size(), Nlidar);
+            
+            for(int i = 0; i < Nlidar; i++)
+            {
+                imu_extrinsics_list.push_back(imu_extrinsics_param[i]);
+            }
+        }
+        else
+        {
+            // Create default identity transformations
             printf("No IMU extrinsics specified. Using identity transformations.\n");
         }
-        else if(imu_extr.size() != Nlidar * 16)
-        {
-            printf(KRED "Warning: IMU extrinsics size mismatch. Expected %d, got %zu. Using identity transformations." RESET "\n", 
-                   Nlidar * 16, imu_extr.size());
-            imu_extr.clear();
-            imu_extr.resize(Nlidar * 16);
-            for(int i = 0; i < Nlidar; i++)
-            {
-                for(int j = 0; j < 16; j++)
-                    imu_extr[i*16 + j] = (j % 5 == 0) ? 1.0 : 0.0;
-            }
-        }
-
-        ROS_ASSERT_MSG( (lidar_extr.size() / 16) == Nlidar,
-                        "Lidar extrinsics not complete: %d < %d (= %d*16)\n",
-                         lidar_extr.size(), Nlidar, Nlidar*16);
 
         printf("Received %d lidar(s) with extrinsics: \n", Nlidar);
         for(int i = 0; i < Nlidar; i++)
@@ -226,8 +278,39 @@ public:
             // Confirm the topics
             printf("Lidar topic #%02d: %s (Auto-detecting message type)\n", i, lidar_topic[i].c_str());
 
-            Matrix4d extrinsicTf = Matrix<double, 4, 4, RowMajor>(&lidar_extr[i*16]);
-            cout << "extrinsicTf: " << endl;
+            Matrix4d extrinsicTf;
+            
+            // Process LiDAR extrinsics
+            if(!lidar_extrinsics_list.empty())
+            {
+                // New format: Euler angles + translation
+                XmlRpc::XmlRpcValue &extr = lidar_extrinsics_list[i];
+                
+                ROS_ASSERT_MSG(extr.getType() == XmlRpc::XmlRpcValue::TypeStruct,
+                              "Each lidar extrinsic must be a struct with roll, pitch, yaw, x, y, z");
+                
+                double roll = static_cast<double>(extr["roll"]);
+                double pitch = static_cast<double>(extr["pitch"]);
+                double yaw = static_cast<double>(extr["yaw"]);
+                double x = static_cast<double>(extr["x"]);
+                double y = static_cast<double>(extr["y"]);
+                double z = static_cast<double>(extr["z"]);
+                
+                extrinsicTf = eulerTranslationToMatrix(roll, pitch, yaw, x, y, z);
+                
+                printf("Lidar %d extrinsics (Euler): roll=%.2f°, pitch=%.2f°, yaw=%.2f°, t=[%.3f, %.3f, %.3f]m\n",
+                       i, roll, pitch, yaw, x, y, z);
+            }
+            else
+            {
+                // Old format: 4x4 matrix
+                vector<double> lidar_extr = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+                nh_ptr->getParam("lidar_extr", lidar_extr);
+                extrinsicTf = Matrix<double, 4, 4, RowMajor>(&lidar_extr[i*16]);
+                printf("Lidar %d using old matrix format\n", i);
+            }
+
+            cout << "LiDAR " << i << " extrinsicTf: " << endl;
             cout << extrinsicTf << endl;
 
             R_B_L.push_back(extrinsicTf.block<3, 3>(0, 0));
@@ -239,10 +322,40 @@ public:
             // 添加IMU相关的初始化
             imu_buf.push_back(deque<ImuPacket>(0));
             
-            // 处理IMU外参
-            Matrix4d imu_extrinsicTf = Matrix<double, 4, 4, RowMajor>(&imu_extr[i*16]);
+            // Process IMU extrinsics
+            Matrix4d imu_extrinsicTf;
+            if(!imu_extrinsics_list.empty())
+            {
+                // New format: Euler angles + translation
+                XmlRpc::XmlRpcValue &imu_extr = imu_extrinsics_list[i];
+                
+                ROS_ASSERT_MSG(imu_extr.getType() == XmlRpc::XmlRpcValue::TypeStruct,
+                              "Each IMU extrinsic must be a struct with roll, pitch, yaw, x, y, z");
+                
+                double roll = static_cast<double>(imu_extr["roll"]);
+                double pitch = static_cast<double>(imu_extr["pitch"]);
+                double yaw = static_cast<double>(imu_extr["yaw"]);
+                double x = static_cast<double>(imu_extr["x"]);
+                double y = static_cast<double>(imu_extr["y"]);
+                double z = static_cast<double>(imu_extr["z"]);
+                
+                imu_extrinsicTf = eulerTranslationToMatrix(roll, pitch, yaw, x, y, z);
+                
+                printf("IMU %d extrinsics (Euler): roll=%.2f°, pitch=%.2f°, yaw=%.2f°, t=[%.3f, %.3f, %.3f]m\n",
+                       i, roll, pitch, yaw, x, y, z);
+            }
+            else
+            {
+                // Default: identity transformation
+                imu_extrinsicTf = Matrix4d::Identity();
+                printf("IMU %d using identity transformation\n", i);
+            }
+            
             R_B_I.push_back(imu_extrinsicTf.block<3, 3>(0, 0));
             t_B_I.push_back(imu_extrinsicTf.block<3, 1>(0, 3));
+
+            cout << "IMU " << i << " extrinsicTf: " << endl;
+            cout << imu_extrinsicTf << endl;
 
             // Subscribe to both message types - the system will auto-detect which one is active
             // PointCloud2 subscriber
@@ -267,8 +380,6 @@ public:
                                              boost::bind(&MergeLidar::ImuHandler, this,
                                                          _1, i)));
                 printf("Subscribed to IMU %d: %s\n", i, imu_topic[i].c_str());
-                cout << "IMU extrinsicTf: " << endl;
-                cout << imu_extrinsicTf << endl;
             }
             else
             {

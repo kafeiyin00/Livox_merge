@@ -29,7 +29,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 ## catkin specific configuration ##
 ###################################
 catkin_package(
-  INCLUDE_DIRS include
   LIBRARIES ${PROJECT_NAME}
   CATKIN_DEPENDS 
     roscpp 
@@ -53,20 +52,19 @@ catkin_package(
 
 ## Specify additional locations of header files
 include_directories(
-  include
   ${catkin_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIRS}
 )
 
 ## Add executable
-add_executable(merge_lidar src/MergeLidar.cpp)
+add_executable(merge_lidar_node src/MergeLidar.cpp)
 
 ## Add cmake target dependencies of the executable
-add_dependencies(merge_lidar ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(merge_lidar_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(merge_lidar
+target_link_libraries(merge_lidar_node
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   OpenMP::OpenMP_CXX
@@ -89,15 +87,8 @@ catkin_install_python(PROGRAMS
 )
 
 ## Mark executables for installation
-install(TARGETS merge_lidar
+install(TARGETS merge_lidar_node
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
-
-## Mark cpp header files for installation
-install(DIRECTORY include/${PROJECT_NAME}/
-  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-  FILES_MATCHING PATTERN "*.h"
-  PATTERN ".svn" EXCLUDE
 )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)

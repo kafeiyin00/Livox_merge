@@ -1,6 +1,6 @@
 <launch>
     <!-- Multi-LiDAR and IMU Fusion Node for Livox Sensors -->
-    <node pkg="livox_merge" type="merge_lidar" name="livox_merge_node" output="screen">
+    <node pkg="livox_merge" type="merge_lidar_node" name="livox_merge_node" output="screen">
         
         <!-- LiDAR Topics -->
         <rosparam param="lidar_topic">[
@@ -14,33 +14,37 @@
             "/livox/imu_192_168_11_125"
         ]</rosparam>
         
-        <!-- LiDAR Extrinsics (4x4 transformation matrices in row-major order) -->
-        <!-- First LiDAR: Identity transformation -->
-        <!-- Second LiDAR: 90-degree rotation around Y-axis -->
-        <rosparam param="lidar_extr">
-            [1, 0, 0, 0,
-             0, 1, 0, 0,
-             0, 0, 1, 0,
-             0, 0, 0, 1,
-             0, 0, 1, 0,
-             0, 1, 0, 0,
-            -1, 0, 0, 0,
-             0, 0, 0, 1]
+        <!-- LiDAR Extrinsics (Euler angles in degrees and translation in meters) -->
+        <rosparam param="lidar_extrinsics">
+            - roll: 0.0
+              pitch: 0.0
+              yaw: 0.0
+              x: 0.0
+              y: 0.0
+              z: 0.0
+            - roll: 0.0
+              pitch: 0.0
+              yaw: 90.0
+              x: 0.0
+              y: 0.0
+              z: 0.0
         </rosparam>
         
-        <!-- IMU Extrinsics (4x4 transformation matrices in row-major order) -->
+        <!-- IMU Extrinsics (Euler angles in degrees and translation in meters) -->
         <!-- IMU通常与对应的LiDAR有相同或轻微的偏移 -->
-        <!-- First IMU: Identity transformation (same as LiDAR) -->
-        <!-- Second IMU: Same rotation as second LiDAR -->
-        <rosparam param="imu_extr">
-            [1, 0, 0, 0,
-             0, 1, 0, 0,
-             0, 0, 1, 0,
-             0, 0, 0, 1,
-             0, 0, 1, 0,
-             0, 1, 0, 0,
-            -1, 0, 0, 0,
-             0, 0, 0, 1]
+        <rosparam param="imu_extrinsics">
+            - roll: 0.0
+              pitch: 0.0
+              yaw: 0.0
+              x: 0.0
+              y: 0.0
+              z: 0.0
+            - roll: 0.0
+              pitch: 0.0
+              yaw: 90.0
+              x: 0.0
+              y: 0.0
+              z: 0.0
         </rosparam>
         
         <!-- Topic Remapping -->
