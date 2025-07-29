@@ -151,6 +151,7 @@ private:
     ros::Publisher merged_pc_pub;
     ros::Publisher merged_livox_pub; // 新增：发布Livox CustomMsg格式的合并点云
     ros::Publisher merged_imu_pub;   // 修改：发布所有转换后的IMU数据（按时间顺序）
+    ros::Publisher merged_pc_sliced_pub; // 新增：发布高度截取后的点云
 
     // Lidar extrinsics
     deque<Matrix3d> R_B_L;
@@ -172,6 +173,10 @@ private:
     double cutoff_time_new = -1;
     double sync_frequency = 20.0; // 同步频率 20Hz，实现实时性能
     double sync_period = 1.0 / sync_frequency;
+    
+    // 高度截取参数
+    double slice_z_min = -2.0;  // 默认最小高度
+    double slice_z_max = 2.0;   // 默认最大高度
     
     // 实时性能监控
     double last_sync_time = 0;
@@ -406,12 +411,19 @@ public:
         merged_pc_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("/merged_pointcloud", 1000);
         merged_livox_pub = nh_ptr->advertise<livox_ros_driver::CustomMsg>("/merged_livox", 1000);
         merged_imu_pub = nh_ptr->advertise<sensor_msgs::Imu>("/merged_imu", 1000);
+        merged_pc_sliced_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("/merged_pointcloud_sliced", 1000);
+
+        // 读取高度截取参数
+        nh_ptr->param("slice_z_min", slice_z_min, -2.0);
+        nh_ptr->param("slice_z_max", slice_z_max, 2.0);
 
         printf("Initialized MergeLidar with %d lidars\n", Nlidar);
         printf("Target sync frequency: %.1f Hz\n", sync_frequency);
         printf("Sync period: %.3f ms\n", sync_period * 1000);
         printf("Publishing merged PointCloud2 to: /merged_pointcloud\n");
         printf("Publishing merged Livox CustomMsg to: /merged_livox\n");
+        printf("Publishing height-sliced PointCloud2 to: /merged_pointcloud_sliced\n");
+        printf("Height slice range: %.2f to %.2f meters\n", slice_z_min, slice_z_max);
         printf("Publishing time-sorted IMU data to: /merged_imu\n");
 
         /* #endregion Lidar -----------------------------------------------------------------------------------------*/
@@ -799,6 +811,9 @@ public:
                 // 发布PointCloud2格式
                 publishCloud(merged_pc_pub, *extracted_points.cloud, stamp_time, frame_id);
                 
+                // 发布高度截取后的PointCloud2格式
+                publishSlicedCloud(merged_pc_sliced_pub, *extracted_points.cloud, stamp_time, frame_id, slice_z_min, slice_z_max);
+                
                 // 发布Livox CustomMsg格式
                 publishLivoxCloud(merged_livox_pub, *extracted_points.cloud, stamp_time, frame_id);
                 
@@ -961,6 +976,26 @@ public:
     {
         sensor_msgs::PointCloud2 cloud_;
         pcl::toROSMsg(cloud, cloud_);
+        cloud_.header.stamp = thisStamp;
+        cloud_.header.frame_id = thisFrame;
+        pub.publish(cloud_);
+    }
+
+    void publishSlicedCloud(ros::Publisher &pub, CloudOuster &cloud, ros::Time thisStamp, std::string thisFrame, double z_min, double z_max)
+    {
+        CloudOuster sliced_cloud;
+        sliced_cloud.reserve(cloud.size());
+        
+        for (const auto& point : cloud.points)
+        {
+            if (point.z >= z_min && point.z <= z_max)
+            {
+                sliced_cloud.push_back(point);
+            }
+        }
+        
+        sensor_msgs::PointCloud2 cloud_;
+        pcl::toROSMsg(sliced_cloud, cloud_);
         cloud_.header.stamp = thisStamp;
         cloud_.header.frame_id = thisFrame;
         pub.publish(cloud_);

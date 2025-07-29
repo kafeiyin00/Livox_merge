@@ -46,8 +46,8 @@
               y: 0.0
               z: 0.0
         </rosparam>
-
-         <!-- Height slicing parameters -->
+        
+        <!-- Height slicing parameters -->
         <param name="slice_z_min" value="-1.5"/>
         <param name="slice_z_max" value="2.5"/>
         
