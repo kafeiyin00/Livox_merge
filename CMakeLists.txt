@@ -13,7 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   pcl_ros
   pcl_conversions
-  livox_ros_driver
+  livox_ros_driver2
   tf2
   tf2_ros
 )
@@ -38,7 +38,7 @@ catkin_package(
     geometry_msgs 
     pcl_ros 
     pcl_conversions 
-    livox_ros_driver
+    livox_ros_driver2
     tf2
     tf2_ros
   DEPENDS 
@@ -72,7 +72,7 @@ target_link_libraries(merge_lidar_node
 
 ## Compiler-specific options
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  target_compile_options(merge_lidar PRIVATE -Wall -Wextra -O3)
+  target_compile_options(merge_lidar_node PRIVATE -Wall -Wextra -O3)
 endif()
 
 #############
