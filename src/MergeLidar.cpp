@@ -171,6 +171,8 @@ private:
 
     double cutoff_time = -1;
     double cutoff_time_new = -1;
+    double last_lidar_time = -1;   // 用于检测时间回退（雷达重启 / 数据重放）
+    std::atomic<bool> sync_reset_needed{false}; // 回调线程通知同步线程执行重置
     double sync_frequency = 20.0; // 同步频率 20Hz，实现实时性能
     double sync_period = 1.0 / sync_frequency;
     
@@ -545,6 +547,16 @@ public:
             startTime = endTime - 0.1;
         }
 
+        // 时间回退检测（雷达重启 / rosbag 重放）：只设置标志，由同步线程在安全点执行重置，
+        // 避免回调线程直接清空缓冲区与同步线程并发访问产生竞态（之前会导致 "Time cannot be negative" 崩溃）。
+        if (last_lidar_time > 0.0 && startTime < last_lidar_time - 1.0)
+        {
+            ROS_WARN("Livox lidar time went backwards (%.3f -> %.3f), requesting merge sync reset",
+                     last_lidar_time, startTime);
+            sync_reset_needed.store(true);
+        }
+        last_lidar_time = startTime;
+
         // 检查点云数据质量
         if(msg->points.empty())
         {
@@ -760,6 +772,21 @@ public:
         
         while(ros::ok())
         {
+            // 在同步线程内执行重置（与缓冲区的读取在同一线程，避免竞态）
+            if (sync_reset_needed.exchange(false))
+            {
+                lidar_buf_mtx.lock();
+                for (auto &buf : lidar_buf) buf.clear();
+                for (auto &buf : lidar_leftover_buf) buf.clear();
+                lidar_buf_mtx.unlock();
+                imu_buf_mtx.lock();
+                for (auto &buf : imu_buf) buf.clear();
+                imu_buf_mtx.unlock();
+                cutoff_time = -1;
+                cutoff_time_new = -1;
+                ROS_WARN("SyncLidar: reset merge sync state done");
+            }
+
             double current_time = ros::Time::now().toSec();
             
             // Loop if the secondary buffers don't over lap
